@@ -10,6 +10,7 @@ const int WIDTH=80;
 const int HEIGHT=20;
 
 char arena[HEIGHT][WIDTH];
+const int NUM_PLATFORMS = 5;
 
 int playerX, playerY;
 int playerHP = 5;
@@ -25,10 +26,28 @@ bool *enemyAlive;
 
 clock_t lastHit = 0;
 
-void clearScreen()
+void gotoXY(int x, int y)
 {
-    system("cls");
+    COORD coord;
+    coord.X = x;
+    coord.Y = y;
+    SetConsoleCursorPosition(GetStdHandle(STD_OUTPUT_HANDLE), coord);
 }
+void generatePlatforms()
+{
+    for(int i=0; i<NUM_PLATFORMS; i++)
+    {
+        int platLength = 5 + rand()%6;
+        int platX = 1 + rand()%(WIDTH-platLength-2);
+        int platY = 3 + rand()%(HEIGHT-6);
+
+        for(int x=platX; x<platX+platLength; x++)
+        {
+            arena[platY][x] = '=';
+        }
+    }
+}
+
 void initArena()
 {
     for(int i=0; i<HEIGHT; i++)
@@ -45,14 +64,7 @@ void initArena()
             }
         }
     }
-    int platformStart = WIDTH/4;
-    int platformEnd = 2*(WIDTH/4);
-    int platformHeight = HEIGHT-6;
-
-    for(int i=platformStart; i<platformEnd; i++)
-    {
-        arena[platformHeight][i] = '=';
-    }
+    generatePlatforms();
 }
 void renderArena()
 {
@@ -65,17 +77,46 @@ void renderArena()
         cout << endl;
     }
 }
-int playerX;
-int playerY;
-int playerHP = 5;
-
 void initPlayer()
 {
     playerX = WIDTH / 2;
     playerY = HEIGHT / 2;
 }
+bool solid(int x, int y)
+{
+    return arena[y][x]=='#' || arena[y][x]=='=';
+}
+void updatePhysics()
+{
+    if(!onGround) {
+        velocityY++;
+        int nextY = playerY + velocityY;
+        if(solid(playerX, nextY)) {
+            onGround = true;
+            jumpCount = 0;
+            velocityY = 0;
+        } else {
+            playerY = nextY;
+        }
+    }
+}
+void input()
+{
+    while (_kbhit()) {
+        char c = _getch();
+        if(c=='a' && !solid(playerX-1,playerY)) playerX--;
+        if(c=='d' && !solid(playerX+1,playerY)) playerX++;
+
+        if(c=='w' && jumpCount<2){
+            jumpCount++;
+            onGround=false;
+            velocityY = -2;
+        }
+    }
+}
 void render()
 {
+    gotoXY(0,0);
     for(int i = 0; i < HEIGHT; i++)
     {
         for(int j = 0; j < WIDTH; j++)
@@ -91,10 +132,19 @@ void render()
 int main()
 {
     srand((unsigned)time(0));
-    clearScreen();
     initArena();
-
     initPlayer();
-    render();
+
+    CONSOLE_CURSOR_INFO cursorInfo;
+    cursorInfo.bVisible = false;
+    cursorInfo.dwSize = 1;
+    SetConsoleCursorInfo(GetStdHandle(STD_OUTPUT_HANDLE), &cursorInfo);
+
+    while(true)
+    {
+        input();
+        render();
+        Sleep(50);
+    }
 
 }
