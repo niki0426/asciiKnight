@@ -1,0 +1,6 @@
+.vs/             
+*.sln.dotsettings.user
+*.user
+*.suo
+*.db
+*.opendb
