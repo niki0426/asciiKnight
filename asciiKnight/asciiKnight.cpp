@@ -91,6 +91,10 @@ char* enemyType = nullptr;
 bool* enemyAlive = nullptr;
 int currentWave = 1;
 
+// Бос характеристики
+bool bossActive = false;
+int bossX, bossY, bossHP;
+
 bool isPlatform(int x, int y)
 {
     return arena[y][x] == '=';
@@ -99,6 +103,23 @@ bool isPlatform(int x, int y)
 bool isWall(int x, int y)
 {
     return arena[y][x] == '#';
+}
+void spawnWave() {
+    if (wave >= 5) { // На вълна 5 идва босът
+        bossActive = true;
+        bossX = 10; bossY = 5; bossHP = 15;
+        return;
+    }
+
+    // Случайно добавяне на 2 до 4 нови врага
+    int newEnemies = 2 + (rand() % 3);
+    for (int i = 0; i < newEnemies && currentEnemyCount < MAX_ENEMIES; i++) {
+        enemyX[currentEnemyCount] = rand() % 20 + 1;
+        enemyY[currentEnemyCount] = rand() % 10 + 1;
+        enemyActive[currentEnemyCount] = true;
+        currentEnemyCount++;
+    }
+    wave++;
 }
 void spawnE(int i)
 {
@@ -158,7 +179,7 @@ void initEnemies(int count)
 }
 bool insideArena(int x, int y)
 {
-    return x > 0 && x < WIDTH - 1 && y > 0 && y < HEIGHT - 1;
+    return x > 0 && x < WIDTH && y > 0 && y < HEIGHT;
 }
 
 void updateEnemies()
@@ -212,8 +233,8 @@ void updateEnemies()
         if (enemyType[i] == 'J')
         {
             if (abs(playerX - enemyX[i]) < 6 &&
-                enemyVY[i] == 0 &&
-                isPlatform(enemyX[i], enemyY[i] + 1))
+                enemyVY[i] == 0 /*&&
+                isPlatform(enemyX[i], enemyY[i] + 1)*/)
             {
                 enemyVY[i] = -4;
             }
@@ -240,6 +261,7 @@ void updateEnemies()
         }
     }
 }
+
 void updatePhysics()
 {
     if (!onGround)
@@ -260,23 +282,57 @@ void updatePhysics()
         playerY = nextY;
     }
 }
-void input()
+void attack(char dir)
 {
-    while (_kbhit()) {
-        char c = _getch();
-        if (c == 'a' && !solid(playerX - 1, playerY))
-        {
-            playerX--;
-        }
-        if (c == 'd' && !solid(playerX + 1, playerY))
-        {
-            playerX++;
-        }
+    int tx = playerX;
+    int ty = playerY;
 
-        if (c == 'w' && jumpCount < 2) {
-            jumpCount++;
-            onGround = false;
-            velocityY = -2;
+    if (dir == 'i') ty--;
+    if (dir == 'k') ty++;
+    if (dir == 'j') tx--;
+    if (dir == 'l') tx++;
+
+    attackX = tx;
+    attackY = ty;
+    attackChar = '*';
+    attackTime = clock();
+
+    for (int i = 0; i < enemyCount; i++)
+    {
+        if (enemyAlive[i] &&
+            enemyX[i] == tx &&
+            enemyY[i] == ty)
+        {
+            gotoXY(0, HEIGHT + 3);
+            cout << "HIT ENEMY " << i << "   ";
+            enemyAlive[i] = false;
+            return;
+        }
+    }
+}
+
+void checkPlayerDamage()
+{
+    for (int i = 0; i < enemyCount; i++)
+    {
+        if (enemyAlive[i] && enemyX[i] == playerX && enemyY[i] == playerY)
+        {
+            if (clock() - lastHit > 500)
+            {
+                playerHP--;
+                lastHit = clock();
+            }
+        }
+    }
+
+    if (bossActive &&
+        playerX >= bossX && playerX < bossX + 3 &&
+        playerY >= bossY && playerY < bossY + 3)
+    {
+        if (clock() - lastHit > 500)
+        {
+            playerHP -= 2;
+            lastHit = clock();
         }
     }
 }
@@ -291,6 +347,15 @@ bool allEnemiesDead()
     }
     return true;
 }
+void input()
+{
+    char c = _getch(); // БЛОКИРА – чака клавиш
+
+    system("cls");
+    cout << "KEY CODE: " << (int)c << endl;
+
+    if (c == 27) exit(0); // ESC за изход
+}
 void render()
 {
     gotoXY(0, 0);
@@ -301,25 +366,53 @@ void render()
         for (int j = 0; j < WIDTH; j++)
         {
             bool drawn = false;
+            if (clock() - attackTime < 300 && x == attackX && y == attackY)
+            {
+                cout << attackChar;
+                continue;
+            }
 
-            if (i == playerY && j == playerX)
+            bool drawn = false;
+
+            // Играч
+            if (x == playerX && y == playerY)
             {
                 cout << '@';
                 continue;
             }
 
-            for (int e = 0; e < enemyCount; e++)
+            // Boss
+            if (bossActive &&
+                x >= bossX && x < bossX + 3 &&
+                y >= bossY && y < bossY + 3)
             {
-                if (enemyAlive[e] && enemyX[e] == j && enemyY[e] == i)
+                cout << 'B';
+                continue;
+            }
+
+            // Врагове
+            for (int i = 0; i < enemyCount; i++)
+            {
+                if (enemyAlive[i] && enemyX[i] == x && enemyY[i] == y)
                 {
-                    cout << enemyType[e];
+                    cout << enemyType[i];
                     drawn = true;
                     break;
                 }
             }
 
+            // АТАКА – РИСУВА СЕ НАЙ-ОТГОРЕ
+            if (!drawn &&
+                clock() - attackTime < 300 &&
+                x == attackX && y == attackY)
+            {
+                cout << attackChar;
+                continue;
+            }
+
+            // Arena
             if (!drawn)
-                cout << arena[i][j];
+                cout << arena[y][x];
         }
         cout << endl;
     }
@@ -342,7 +435,49 @@ int main()
         input();
         updatePhysics();
         updateEnemies();
+        checkPlayerDamage();
         render();
+
+        bool allDead = true;
+        for (int i = 0; i < enemyCount; i++)
+            if (enemyAlive[i]) allDead = false;
+
+        if (allDead && !bossActive)
+        {
+            wave++;
+            if (wave < 5)
+            {
+                delete[] enemyX;
+                delete[] enemyY;
+                delete[] enemyVX;
+                delete[] enemyVY;
+                delete[] enemyType;
+                delete[] enemyAlive;
+                initEnemies(enemyCount + (2 + rand() % 3));
+            }
+            else
+            {
+                bossActive = true;
+                bossX = WIDTH / 2 - 1;
+                bossY = 3;
+                bossHP = 15;
+            }
+        }
+
+        if (playerHP <= 0)
+        {
+            system("cls");
+            cout << "GAME OVER\n";
+            break;
+        }
+
+        if (!bossActive && wave >= 5)
+        {
+            system("cls");
+            cout << "YOU WIN!\n";
+            break;
+        }
+
         Sleep(60);
     }
 }
