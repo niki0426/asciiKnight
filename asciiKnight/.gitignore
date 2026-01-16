@@ -4,3 +4,4 @@
 *.suo
 *.db
 *.opendb
+*./tall git-filter-repo
