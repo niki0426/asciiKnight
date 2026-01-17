@@ -1,16 +1,30 @@
-﻿#include <iostream>
+﻿/**
+*
+* Solution to course project # 10
+* Introduction to programming course
+* Faculty of Mathematics and Informatics of Sofia University
+* Winter semester 2025/2026
+*
+* @author Nikoleta Rasheva
+* @idnumber 9MI0600618
+* @compiler VC
+*
+* Implements an ASCII combat game.
+*
+*/
+
+#include <iostream>
 #include <ctime>
 #include <conio.h>
 #include <cstdlib>
 #include <windows.h>
 
-using namespace std;
-
-const int WIDTH = 80;
-const int HEIGHT = 20;
-
-char arena[HEIGHT][WIDTH];
+const int ARENA_WIDTH = 80;
+const int ARENA_HEIGHT = 20;
 const int NUM_PLATFORMS = 5;
+const int MAX_PROJECTILES = 5;
+
+char arena[ARENA_HEIGHT][ARENA_WIDTH];
 
 int playerX, playerY;
 int playerHP = 5;
@@ -38,7 +52,15 @@ char attackChar;
 int attackHeight = 1;
 char attackPattern[4][4];
 bool attackActive = false;
+
 clock_t attackTime = 0;
+
+bool gameWon = false;
+int projectileX[MAX_PROJECTILES];
+int projectileY[MAX_PROJECTILES];
+int projectileVX[MAX_PROJECTILES];
+bool projectileActive[MAX_PROJECTILES];
+int projectileVY[MAX_PROJECTILES];
 
 void gotoXY(int x, int y) {
 	COORD coord;
@@ -46,12 +68,16 @@ void gotoXY(int x, int y) {
 	coord.Y = y;
 	SetConsoleCursorPosition(GetStdHandle(STD_OUTPUT_HANDLE), coord);
 }
+// Changes text color using Windows console attributes
+void setColor(int color) {
+	SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), color);
+}
 void generatePlatforms() {
 	for (int i = 0; i < NUM_PLATFORMS; i++)
 	{
 		int platLength = 5 + rand() % 6;
-		int platX = 1 + rand() % (WIDTH - platLength - 2);
-		int platY = 3 + rand() % (HEIGHT - 6);
+		int platX = 1 + rand() % (ARENA_WIDTH - platLength - 2);
+		int platY = 3 + rand() % (ARENA_HEIGHT - 6);
 
 		for (int x = platX; x < platX + platLength; x++)
 		{
@@ -60,11 +86,11 @@ void generatePlatforms() {
 	}
 }
 void initArena() {
-	for (int i = 0; i < HEIGHT; i++)
+	for (int i = 0; i < ARENA_HEIGHT; i++)
 	{
-		for (int j = 0; j < WIDTH; j++)
+		for (int j = 0; j < ARENA_WIDTH; j++)
 		{
-			if (i == 0 || i == HEIGHT - 1 || j == 0 || j == WIDTH - 1)
+			if (i == 0 || i == ARENA_HEIGHT - 1 || j == 0 || j == ARENA_WIDTH - 1)
 			{
 				arena[i][j] = '#';
 			}
@@ -76,112 +102,98 @@ void initArena() {
 	}
 	generatePlatforms();
 }
-void renderArena()
-{
-	for (int i = 0; i < HEIGHT; i++)
-	{
-		for (int j = 0; j < WIDTH; j++)
-		{
-			cout << arena[i][j];
+void renderArena() {
+	for (int i = 0; i < ARENA_HEIGHT; i++) {
+		for (int j = 0; j < ARENA_WIDTH; j++) {
+			std::cout << arena[i][j];
 		}
-		cout << endl;
+		std::cout << std::endl;
 	}
 }
-bool solid(int x, int y)
-{
+// Checks if coordinates (x, y) contain a wall or platform
+bool solid(int x, int y) {
 	return arena[y][x] == '#' || arena[y][x] == '=';
 }
-//Player
-void initPlayer()
-{
-	playerX = WIDTH / 2;
-	playerY = HEIGHT / 2;
+void initPlayer() {
+	playerX = ARENA_WIDTH / 2;
+	playerY = ARENA_HEIGHT / 2;
 }
-bool isPlatform(int x, int y)
-{
+bool isPlatform(int x, int y) {
 	return arena[y][x] == '=';
 }
 
-bool isWall(int x, int y)
-{
+bool isWall(int x, int y) {
 	return arena[y][x] == '#';
 }
-bool insideArena(int x, int y)
-{
-	return x > 0 && x < WIDTH && y > 0 && y < HEIGHT;
+bool insideArena(int x, int y) {
+	return x > 0 && x < ARENA_WIDTH && y > 0 && y < ARENA_HEIGHT;
 }
-void spawnE(int i)
-{
-	while (true)
-	{
-		int x = 1 + rand() % (WIDTH - 2);
-		int y = 1 + rand() % (HEIGHT - 2);
-
-		if (arena[y][x] != ' ')
-			continue;
-
-		if (arena[y + 1][x] != '=')
-			continue;
-
-		if (arena[y][x - 1] == '#' || arena[y][x + 1] == '#')
-			continue;
-
-		enemyX[i] = x;
-		enemyY[i] = y;
-		enemyVX[i] = (rand() % 2 == 0) ? -1 : 1;
-		enemyVY[i] = 0;
-		return;
-	}
+void clearEnemies() {
+	delete[] enemyX;
+	delete[] enemyY;
+	delete[] enemyVX;
+	delete[] enemyVY;
+	delete[] enemyHP;
+	delete[] enemyType;
+	delete[] enemyAlive;
 }
-
-void initEnemies(int count)
-{
+void initEnemies(int count) {
+	clearEnemies();
 	enemyCount = count;
 
-	enemyX = new int[enemyCount];
-	enemyY = new int[enemyCount];
-	enemyVX = new int[enemyCount];
-	enemyVY = new int[enemyCount];
-	enemyHP = new int[enemyCount];
-	enemyType = new char[enemyCount];
-	enemyAlive = new bool[enemyCount];
+	enemyX = new int[count];
+	enemyY = new int[count];
+	enemyVX = new int[count];
+	enemyVY = new int[count];
+	enemyHP = new int[count];
+	enemyType = new char[count];
+	enemyAlive = new bool[count];
 
 	char enemyTypesTemplate[4] = { 'E', 'J', 'F', 'C' };
 
-	for (int i = 0; i < enemyCount; i++)
-	{
+	for (int i = 0; i < enemyCount; i++) {
 		enemyAlive[i] = true;
 		enemyHP[i] = 1;
-
 		enemyType[i] = enemyTypesTemplate[i % 4];
+		bool placed = false;
+		while (!placed) {
+			int x = 1 + rand() % (ARENA_WIDTH - 2);
+			int y = 1 + rand() % (ARENA_HEIGHT - 2);
 
-		enemyX[i] = 2 + rand() % (WIDTH - 4);
-		enemyY[i] = 2 + rand() % (HEIGHT - 6);
-
-		enemyVX[i] = (rand() % 2 == 0 ? -1 : 1);
-		enemyVY[i] = 0;
-		if (enemyType[i] == 'E') {
-			spawnE(i);
+			if (arena[y][x] == ' ' && arena[y + 1][x] == '=' && arena[y][x - 1] != '#' && arena[y][x + 1] != '#') {
+				enemyX[i] = x;
+				enemyY[i] = y;
+				enemyVX[i] = (rand() % 2 == 0 ? -1 : 1);
+				enemyVY[i] = 0;
+				placed = true;
+			}
 		}
 	}
 }
+// Manages enemy waves and triggers boss appearance
 void spawnWave() {
-	if (bossActive) return;
+	if (bossActive || gameWon) return;
 
-	if (currentWave >= 5) {
+	if (currentWave > 3) return;
+
+	currentWave++;
+
+	if (currentWave == 1) {
+		initEnemies(4);
+	}
+	else if (currentWave == 2) {
+		initEnemies(5);
+	}
+	else if (currentWave == 3) {
+		initEnemies(6);
 		bossActive = true;
-		bossX = WIDTH / 2 - 1;
+		bossX = ARENA_WIDTH / 2 - 1;
 		bossY = 2;
 		bossHP = 15;
-		return;
 	}
-
-	int newEnemies = 2 + rand() % 3 + currentWave;
-	initEnemies(newEnemies);
-	currentWave++;
 }
-void updateEnemies()
-{
+// Updates movement and behavior for all active enemy types
+void updateEnemies() {
 	for (int i = 0; i < enemyCount; i++) {
 		if (!enemyAlive[i]) continue;
 
@@ -223,7 +235,7 @@ void updateEnemies()
 			if (abs(playerX - enemyX[i]) < 6 &&
 				enemyVY[i] == 0 && (isPlatform(enemyX[i], enemyY[i] + 1) || isWall(enemyX[i], enemyY[i] + 1)))
 			{
-				enemyVY[i] = -4;
+				enemyVY[i] = -4; // Jump
 			}
 		}
 
@@ -239,15 +251,97 @@ void updateEnemies()
 		}
 
 		if (enemyType[i] == 'C') {
-			if (solid(enemyX[i] + enemyVX[i], enemyY[i] + enemyVY[i]))
-			{
+			if (solid(enemyX[i] + enemyVX[i], enemyY[i])) {
 				enemyVX[i] *= -1;
-				enemyVY[i] *= -1;
 			}
 			else
 			{
 				enemyX[i] += enemyVX[i];
-				enemyY[i] += enemyVY[i];
+			}
+		}
+	}
+}
+void checkPlayerDamage() {
+	clock_t currentTime = clock();
+	// Convert CPU ticks to milliseconds
+	double elapsedMs = (double)(currentTime - lastHit) * 1000.0 / CLOCKS_PER_SEC;
+
+	if (elapsedMs < 1000) return;
+
+	bool hit = false;
+	for (int i = 0; i < enemyCount; i++) {
+		// Check 3x3 area around player (distance <= 1) for enemy contact
+		if (enemyAlive[i] && abs(enemyX[i] - playerX) <= 1 && abs(enemyY[i] - playerY) <= 1) {
+			playerHP--;
+			hit = true;
+			break;
+		}
+	}
+	// Boss collision: checks if player is inside the 3x3 Boss sprite area
+	if (!hit && bossActive && playerX >= bossX && playerX < bossX + 3 && playerY >= bossY && playerY < bossY + 3) {
+		playerHP -= 2;
+		hit = true;
+	}
+
+	if (hit) lastHit = currentTime;
+}
+void bossShoot() {
+	if (!bossActive || rand() % 15 != 0) {
+		return;
+	}
+	for (int i = 0; i < MAX_PROJECTILES; i++) {
+		if (!projectileActive[i]) {
+			projectileX[i] = bossX + 1;
+			projectileY[i] = bossY + 1;
+
+			projectileVX[i] = 0;
+			projectileVY[i] = 1;
+
+			if (playerX < bossX) {
+				projectileVX[i] = -1;
+			}
+			else {
+				projectileVX[i] = 1;
+			}
+
+			projectileActive[i] = true;
+			break;
+		}
+	}
+}
+// Updates movement and behavior for all active enemy types
+void updateProjectiles() {
+	for (int i = 0; i < MAX_PROJECTILES; i++) {
+		if (!projectileActive[i]) continue;
+
+		projectileX[i] += projectileVX[i];
+		projectileY[i] += projectileVY[i];
+
+		if (!insideArena(projectileX[i], projectileY[i]) ||
+			isWall(projectileX[i], projectileY[i])) {
+			projectileActive[i] = false;
+			continue;
+		}
+
+		if (projectileX[i] == playerX && projectileY[i] == playerY) {
+			playerHP--;
+			projectileActive[i] = false;
+		}
+	}
+}
+void clearProjectilesInAttack() {
+	for (int i = 0; i < MAX_PROJECTILES; i++) {
+		if (!projectileActive[i]) {
+			continue;
+		}
+
+		for (int h = 0; h < attackHeight; h++) {
+			int ay = attackY + h;
+			for (int w = 0; attackPattern[h][w] != '\0'; w++) {
+				int ax = attackX + w;
+				if (projectileX[i] == ax && projectileY[i] == ay) {
+					projectileActive[i] = false;
+				}
 			}
 		}
 	}
@@ -256,10 +350,8 @@ void attack(char dir) {
 	attackX = playerX;
 	attackY = playerY;
 	attackHeight = 1;
-	for (int i = 0; i < 4; i++)
-	{
-		for (int j = 0; j < 4; j++)
-		{
+	for (int i = 0; i < 4; i++) {
+		for (int j = 0; j < 4; j++) {
 			attackPattern[i][j] = ' ';
 		}
 	}
@@ -301,15 +393,12 @@ void attack(char dir) {
 		attackPattern[1][1] = '\0';
 		attackPattern[2][0] = '/';
 		attackPattern[2][1] = '\0';
-
-
 		attackHeight = 3;
 	}
-
-
-
 	attackTime = clock();
 	attackActive = true;
+
+	clearProjectilesInAttack();
 
 	for (int i = 0; i < enemyCount; i++) {
 		if (!enemyAlive[i]) continue;
@@ -336,53 +425,76 @@ void attack(char dir) {
 			}
 		}
 	}
+	if (bossHP <= 0) {
+		bossActive = false;
+	}
 }
-
+// Handles gravity, jumping logic, and vertical collisions
 void updatePhysics()
 {
 	if (!onGround)
 	{
 		velocityY++;
-		int nextY = playerY + velocityY;
-		for (int i = 0; i < velocityY; i++)
-		{
-			if (solid(playerX, playerY + i)) {
 
-				onGround = true;
-				jumpCount = 0;
+		if (velocityY > 3) velocityY = 3; // Terminal velocity (max fall speed)
+
+		int steps = abs(velocityY);
+		int direction = (velocityY > 0) ? 1 : -1;
+
+		for (int i = 0; i < steps; i++) {
+			int nextY = playerY + direction;
+
+			if (!insideArena(playerX, nextY)) {
 				velocityY = 0;
-				nextY = playerY + i - 1;
+				break;
+			}
+
+			if (!solid(playerX, nextY)) {
+				playerY = nextY;
+			}
+			else {
+				if (direction == -1) velocityY = 0;
+
+				else if (direction == 1) {
+					onGround = true;
+					jumpCount = 0;
+					velocityY = 0;
+				}
 				break;
 			}
 		}
-		playerY = nextY;
 	}
+
+	if (onGround && !solid(playerX, playerY + 1))
+		onGround = false;
 }
+
 void input()
 {
 	while (_kbhit()) {
 		char c = _getch();
-		if (c == 'a' && !solid(playerX - 1, playerY))
-		{
+		if (c == 'a' && !solid(playerX - 1, playerY)) {
 			playerX--;
-			if (!solid(playerX, playerY + 1))
-			{
+			if (!solid(playerX, playerY + 1)) {
 				onGround = false;
+				jumpCount = 2;
 			}
 		}
-		if (c == 'd' && !solid(playerX + 1, playerY))
-		{
+		if (c == 'd' && !solid(playerX + 1, playerY)) {
 			playerX++;
-			if (!solid(playerX, playerY + 1))
-			{
+			if (!solid(playerX, playerY + 1)) {
 				onGround = false;
+				jumpCount = 2;
 			}
 		}
 
 		if (c == 'w' && jumpCount < 2) {
-			jumpCount++;
-			onGround = false;
-			velocityY = -4;
+
+			if (!solid(playerX, playerY - 1)) {
+				jumpCount++;
+				onGround = false;
+				velocityY = -5;
+			}
 		}
 		if (c == 'k') {
 			if (!solid(playerX, playerY + 1)) {
@@ -394,128 +506,160 @@ void input()
 		}
 	}
 }
-void checkPlayerDamage() {
-	for (int i = 0; i < enemyCount; i++) {
-		if (enemyAlive[i] && enemyX[i] == playerX && enemyY[i] == playerY) {
-			if (clock() - lastHit > 500) {
-				playerHP--;
-				lastHit = clock();
-			}
-		}
-	}
-
-	if (bossActive &&
-		playerX >= bossX && playerX < bossX + 3 &&
-		playerY >= bossY && playerY < bossY + 3) {
-		if (clock() - lastHit > 500) {
-			playerHP -= 2;
-			lastHit = clock();
-		}
-	}
-}
-
 bool allEnemiesDead()
 {
+	if (enemyCount == 0) return true;
+
 	for (int i = 0; i < enemyCount; i++)
 	{
-		if (enemyAlive[i])
-		{
-			return false;
-		}
+		if (enemyAlive[i]) return false;
 	}
 	return true;
 }
+// Determines the symbol and color priority for each cell
+void determineCellVisuals(int x, int y, char& symbol, int& nextAttr) {
+	bool found = false;
 
-void render()
-{
-	gotoXY(0, 0);
-	cout << "HP: " << playerHP << endl;
-	bool attackDrawn = false;
-
-	if (attackActive && clock() - attackTime > 200) {
-		attackActive = false;
+	for (int i = 0; i < MAX_PROJECTILES; i++) {
+		if (projectileActive[i] && projectileX[i] == x && projectileY[i] == y) {
+			symbol = '*';
+			nextAttr = 14; // Yellow
+			found = true;
+			break;
+		}
 	}
-	for (int i = 0; i < HEIGHT; i++)
-	{
-		for (int j = 0; j < WIDTH; j++)
-		{
-			bool drawn = false;
+	if (found) return;
 
-			if (i == playerY && j == playerX)
-			{
-				cout << '@';
-				continue;
-			}
-
-			if (bossActive && j >= bossX && j < bossX + 3 && i >= bossY && i < bossY + 3)
-			{
-				cout << 'B';
-			}
-			else
-			{
-				for (int e = 0; e < enemyCount; e++)
-				{
-					if (enemyAlive[e] && enemyX[e] == j && enemyY[e] == i)
-					{
-						cout << enemyType[e];
-						drawn = true;
+	for (int e = 0; e < enemyCount; e++) {
+		if (enemyAlive[e] && enemyX[e] == x && enemyY[e] == y) {
+			symbol = enemyType[e];
+			// E: 12 (Bright Red), J: 10 (Bright Green), Others: 11 (Bright Cyan)
+			nextAttr = (symbol == 'E') ? 12 : (symbol == 'J' ? 10 : 11);
+			found = true;
+			break;
+		}
+	}
+	if (!found && attackActive) {
+		for (int h = 0; h < attackHeight; h++) {
+			if (attackY + h == y) {
+				for (int w = 0; attackPattern[h][w] != '\0'; w++) {
+					if (attackX + w == x && !isWall(x, y)) {
+						symbol = attackPattern[h][w];
+						nextAttr = 15; // White
+						found = true;
 						break;
 					}
 				}
 			}
-			bool attackDrawn = false;
-
-			if (attackActive) {
-				for (int h = 0; h < attackHeight; h++) {
-					int ay = attackY + h;
-					for (int w = 0; attackPattern[h][w] != '\0'; w++) {
-						int ax = attackX + w;
-						if (ax == j && ay == i) {
-							cout << attackPattern[h][w];
-							attackDrawn = true;
-							break;
-						}
-						if (ax == j && ay == i && !isWall(ax, ay)) {
-							cout << attackPattern[h][w];
-							attackDrawn = true;
-							break;
-						}
-					}
-					if (attackDrawn) break;
-				}
+			if (found) {
+				break;
 			}
-
-			if (attackDrawn) continue;
-
-			if (!drawn) cout << arena[i][j];
 		}
-		cout << endl;
+	}
+	if (!found) {
+		// 8: Dark Gray (Walls/Platforms), 7: Light Gray (Empty space/Background)
+		nextAttr = (symbol == '#' || symbol == '=') ? 8 : 7;
+	}
+}
+void render() {
+	gotoXY(0, 0);
+	setColor(15); std::cout << "HP: " << playerHP;
+	setColor(15); std::cout << "   Wave: " << currentWave << "          \n";
+
+	int currentAttr = 7; // Lightgray
+	setColor(currentAttr);
+	// Auto-disable attack visuals after 200ms duration
+	if (attackActive && clock() - attackTime > 200) {
+		attackActive = false;
 	}
 
-}
+	for (int i = 0; i < ARENA_HEIGHT; i++) {
+		for (int j = 0; j < ARENA_WIDTH; j++) {
+			int nextAttr = 7;
+			char symbol = arena[i][j];
 
+			if (i == playerY && j == playerX) {
+				symbol = '@'; nextAttr = 15; // White
+			}
+			else if (bossActive && j >= bossX - 1 && j < bossX + 3 && i >= bossY && i < bossY + 3) {
+				symbol = 'B'; nextAttr = 14;
+			}
+			else
+			{
+				determineCellVisuals(j, i, symbol, nextAttr);
+			}
+			if (nextAttr != currentAttr) {
+				setColor(nextAttr);
+				currentAttr = nextAttr;
+			}
+			std::cout << symbol;
+		}
+		std::cout << "\n";
+	}
+}
+void gameLoop()
+{
+	currentWave = 0;
+	bossActive = false;
+	gameWon = false;
+	lastHit = clock();
+
+	while (playerHP > 0 && !gameWon) {
+		updateEnemies();
+		if (bossActive) {
+			bossShoot();
+			updateProjectiles();
+
+			// Random Boss movement
+			if (rand() % 10 == 0) {
+				int moveY = (rand() % 2 == 0) ? 1 : -1; // Choose Up or Down
+				if (insideArena(bossX, bossY + moveY)) {
+					bossY += moveY;
+				}
+			}
+		}
+		input();
+		updatePhysics();
+		//checkPlayerDamage();
+
+		if (!bossActive && allEnemiesDead()) {
+			spawnWave();
+		}
+		if (currentWave > 3 && allEnemiesDead() && !bossActive) {
+			gameWon = true;
+		}
+		if (bossActive && bossHP <= 0) {
+			bossActive = false;
+		}
+
+		render();
+		Sleep(80);
+	}
+}
+void endConditions()
+{
+	if (gameWon) {
+		gotoXY(ARENA_WIDTH / 2 - 4, ARENA_HEIGHT / 2);
+		setColor(10);
+		std::cout << "YOU WON!";
+	}
+	else if (playerHP <= 0) {
+		gotoXY(ARENA_WIDTH / 2 - 4, ARENA_HEIGHT / 2);
+		setColor(12);
+		std::cout << "GAME OVER";
+	}
+}
 int main()
 {
 	srand((unsigned)time(0));
 	initArena();
 	initPlayer();
-	initEnemies(6);
 
 	CONSOLE_CURSOR_INFO cursorInfo;
 	cursorInfo.bVisible = false;
 	cursorInfo.dwSize = 1;
 	SetConsoleCursorInfo(GetStdHandle(STD_OUTPUT_HANDLE), &cursorInfo);
 
-	while (true)
-	{
-		updateEnemies();
-		input();
-		updatePhysics();
-
-		if (allEnemiesDead() && !bossActive) {
-			spawnWave();
-		}
-		render();
-		Sleep(60);
-	}
+	gameLoop();
+	endConditions();
 }
