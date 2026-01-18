@@ -168,6 +168,10 @@ void initEnemies(int count) {
 				placed = true;
 			}
 		}
+		if (enemyType[i] == 'C') {
+			enemyVX[i] = 1; // right
+			enemyVY[i] = 0;
+		}
 	}
 }
 // Manages enemy waves and triggers boss appearance
@@ -197,29 +201,22 @@ void updateEnemies() {
 	for (int i = 0; i < enemyCount; i++) {
 		if (!enemyAlive[i]) continue;
 
-		if (enemyType[i] != 'F') {
+		if (enemyType[i] != 'F' && enemyType[i] != 'C') {
 			enemyVY[i]++;
 			if (enemyVY[i] > 3) enemyVY[i] = 3;
-		}
 
-		int vy = enemyVY[i];
-		int stepY = (vy > 0) ? 1 : -1;
-
-		for (int s = 0; s < abs(vy); s++) {
-			if (!insideArena(enemyX[i], enemyY[i] + stepY)) {
-				enemyVY[i] = 0;
-				break;
-			}
-
-			if (!solid(enemyX[i], enemyY[i] + stepY)) {
-				enemyY[i] += stepY;
-			}
-			else {
-				enemyVY[i] = 0;
-				break;
+			int vy = enemyVY[i];
+			int stepY = (vy > 0) ? 1 : -1;
+			for (int s = 0; s < abs(vy); s++) {
+				if (insideArena(enemyX[i], enemyY[i] + stepY) && !solid(enemyX[i], enemyY[i] + stepY)) {
+					enemyY[i] += stepY;
+				}
+				else {
+					enemyVY[i] = 0;
+					break;
+				}
 			}
 		}
-
 		if (enemyType[i] == 'E') {
 			int nx = enemyX[i] + enemyVX[i];
 
@@ -251,12 +248,29 @@ void updateEnemies() {
 		}
 
 		if (enemyType[i] == 'C') {
-			if (solid(enemyX[i] + enemyVX[i], enemyY[i])) {
-				enemyVX[i] *= -1;
+			int nextX = enemyX[i] + enemyVX[i];
+			int nextY = enemyY[i] + enemyVY[i];
+
+			if (solid(nextX, nextY)) {
+				int tempVX = enemyVX[i];
+				enemyVX[i] = enemyVY[i];
+				enemyVY[i] = -tempVX;
 			}
-			else
-			{
-				enemyX[i] += enemyVX[i];
+			else {
+				int sideX = nextX + enemyVY[i];
+				int sideY = nextY - enemyVX[i];
+
+				if (!solid(sideX, sideY)) {
+					enemyX[i] = nextX;
+					enemyY[i] = nextY;
+					int oldVX = enemyVX[i];
+					enemyVX[i] = -enemyVY[i];
+					enemyVY[i] = oldVX;
+				}
+				else {
+					enemyX[i] = nextX;
+					enemyY[i] = nextY;
+				}
 			}
 		}
 	}
@@ -597,7 +611,8 @@ void render() {
 		std :: cout << "\n";
 	}
 }
-void gameLoop() {
+void gameLoop()
+{
 	currentWave = 0;
 	bossActive = false;
 	gameWon = false;
@@ -619,7 +634,7 @@ void gameLoop() {
 		}
 		input();
 		updatePhysics();
-		//checkPlayerDamage();
+		checkPlayerDamage();
 
 		if (!bossActive && allEnemiesDead()) {
 			spawnWave();
@@ -635,7 +650,8 @@ void gameLoop() {
 		Sleep(80);
 	}
 }
-void endConditions() {
+void endConditions()
+{
 	if (gameWon) {
 		gotoXY(ARENA_WIDTH / 2 - 4, ARENA_HEIGHT / 2);
 		setColor(10);
